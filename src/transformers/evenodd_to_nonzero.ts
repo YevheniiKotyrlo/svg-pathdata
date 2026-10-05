@@ -14,12 +14,16 @@ interface Bounds {
   readonly maxY: number;
 }
 
+type PointLocation = 'inside' | 'outside' | 'outline';
+
 /**
  * Reorients the subpaths of a path filled with the `evenodd` rule so that the
  * `nonzero` rule fills the same area: each subpath nested in another winds
  * against the subpath enclosing it, and each outermost subpath keeps its
- * direction. This holds when no subpath crosses itself or another; a subpath
- * crossing another counts as nested in it when most of its points lie inside.
+ * direction. Subpaths of equal area nest in the order they are drawn, so a
+ * subpath drawn twice cancels out. This holds when no subpath crosses itself
+ * or another; a subpath crossing another counts as nested in it when more of
+ * its points lie inside it than outside.
  * @param commands SVG path commands of a path filled with the `evenodd` rule
  * @returns The given commands when no subpath needs reversing, otherwise new
  * absolute commands with the curves converted to cubic bezier curves
@@ -40,7 +44,7 @@ export function EVENODD_TO_NONZERO(commands: SVGCommand[]): SVGCommand[] {
   const areas = signedAreas.map(Math.abs);
   const ascendingByArea = areas
     .map((_area, index) => index)
-    .sort((first, second) => areas[first] - areas[second]);
+    .sort((first, second) => areas[first] - areas[second] || second - first);
   const enclosures = findEnclosures(outlines, areas, ascendingByArea);
   const windings: number[] = [];
 
@@ -166,7 +170,7 @@ function overlap(first: Bounds, second: Bounds): boolean {
   );
 }
 
-function containsPoint(outline: readonly Point[], [x, y]: Point): boolean {
+function locatePoint(outline: readonly Point[], [x, y]: Point): PointLocation {
   let inside = false;
 
   for (
@@ -178,6 +182,16 @@ function containsPoint(outline: readonly Point[], [x, y]: Point): boolean {
     const [priorX, priorY] = outline[previous];
 
     if (
+      (currentX - priorX) * (y - priorY) ===
+        (currentY - priorY) * (x - priorX) &&
+      Math.min(priorX, currentX) <= x &&
+      x <= Math.max(priorX, currentX) &&
+      Math.min(priorY, currentY) <= y &&
+      y <= Math.max(priorY, currentY)
+    ) {
+      return 'outline';
+    }
+    if (
       currentY > y !== priorY > y &&
       x <
         ((priorX - currentX) * (y - currentY)) / (priorY - currentY) + currentX
@@ -185,16 +199,31 @@ function containsPoint(outline: readonly Point[], [x, y]: Point): boolean {
       inside = !inside;
     }
   }
-  return inside;
+  return inside ? 'inside' : 'outside';
 }
 
+// A point on the outline tells neither way
 function holdsMostOf(
   outline: readonly Point[],
   probes: readonly Point[],
 ): boolean {
-  const inside = probes.filter((probe) => containsPoint(outline, probe));
+  const locations = probes.map((probe) => locatePoint(outline, probe));
+  const inside = locations.filter((location) => 'inside' === location);
+  const outside = locations.filter((location) => 'outside' === location);
 
-  return inside.length * 2 > probes.length;
+  return inside.length > outside.length || 0 === outside.length;
+}
+
+// Subpaths of equal area nest in drawing order, so a subpath drawn twice cancels out
+function canEnclose(
+  areas: readonly number[],
+  candidate: number,
+  index: number,
+): boolean {
+  return (
+    areas[candidate] > areas[index] ||
+    (areas[candidate] === areas[index] && candidate < index)
+  );
 }
 
 function findEnclosures(
@@ -214,7 +243,7 @@ function findEnclosures(
     const probeBounds = boundsOf(probes);
     const tightestEnclosure = ascendingByArea.find(
       (candidate) =>
-        areas[candidate] > areas[index] &&
+        canEnclose(areas, candidate, index) &&
         overlap(bounds[candidate], probeBounds) &&
         holdsMostOf(outlines[candidate], probes),
     );

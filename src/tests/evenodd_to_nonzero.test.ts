@@ -90,6 +90,41 @@ describe('Reorienting evenodd subpaths for the nonzero rule', () => {
     ).toEqual('M10 20H20V10H10zM10 10L0 0H30V30H0L0 0L10 10z');
   });
 
+  test('subpath drawn twice cancels out', () => {
+    expect(testEvenoddToNonzero('M0 0H10V10H0Z M0 0H10V10H0Z')).toEqual(
+      'M0 0H10V10H0zM0 10H10V0H0z',
+    );
+  });
+
+  test('subpath drawn twice in opposite directions is kept as written', () => {
+    const input = 'M0 0H10V10H0Z M0 0V10H10V0Z';
+    expect(testEvenoddToNonzero(input)).toEqual(
+      new SVGPathData(input).encode(),
+    );
+  });
+
+  test('subpath drawn three times alternates in drawing order', () => {
+    expect(
+      testEvenoddToNonzero('M0 0H10V10H0Z M0 0H10V10H0Z M0 0H10V10H0Z'),
+    ).toEqual('M0 0H10V10H0zM0 10H10V0H0zM0 0H10V10H0z');
+  });
+
+  test('holes touching their outline on every side wind against it', () => {
+    expect(
+      testEvenoddToNonzero(
+        'M0 0H30V30H0Z M12 0H18V8H12Z M22 12H30V18H22Z M12 22H18V30H12Z M0 12H8V18H0Z',
+      ),
+    ).toEqual(
+      'M0 0H30V30H0zM12 8H18V0H12zM22 18H30V12H22zM12 30H18V22H12zM0 18H8V12H0z',
+    );
+  });
+
+  test('subpath touching another from outside is not nested in it', () => {
+    expect(
+      testEvenoddToNonzero('M0 0H30V30H0Z M15 5H25V25H15Z M15 8V22L5 15Z'),
+    ).toEqual('M0 0H30V30H0zM15 25H25V5H15zM5 15L15 22V8z');
+  });
+
   test('crossing subpath mostly outside the other keeps its direction', () => {
     const input = 'M0 0H20V20H0Z M10 10H40V40H10Z';
     expect(testEvenoddToNonzero(input)).toEqual(
