@@ -21,9 +21,10 @@ type PointLocation = 'inside' | 'outside' | 'outline';
  * `nonzero` rule fills the same area: each subpath nested in another winds
  * against the subpath enclosing it, and each outermost subpath keeps its
  * direction. Subpaths of equal area nest in the order they are drawn, so a
- * subpath drawn twice cancels out. This holds when no subpath crosses itself
- * or another; a subpath crossing another counts as nested in it when more of
- * its points lie inside it than outside.
+ * subpath repeated point for point cancels out; the same shape drawn with other
+ * commands is not recognised as a repeat. This holds when no subpath crosses
+ * itself or another; a subpath crossing another counts as nested in it when
+ * more of its points lie inside it than outside.
  * @param commands SVG path commands of a path filled with the `evenodd` rule
  * @returns The given commands when no subpath needs reversing, otherwise new
  * absolute commands with the curves converted to cubic bezier curves
@@ -214,7 +215,7 @@ function holdsMostOf(
   return inside.length > outside.length || 0 === outside.length;
 }
 
-// Subpaths of equal area nest in drawing order, so a subpath drawn twice cancels out
+// Subpaths of equal area nest in drawing order, so a subpath repeated point for point cancels out
 function canEnclose(
   areas: readonly number[],
   candidate: number,
